@@ -1,0 +1,419 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  passwordHash       String
+  createdAt          DateTime @default(now())
+  // AI settings (key encrypted with lib/crypto)
+  aiProvider         String?
+  aiModel            String?
+  aiKeyEnc           String?
+  // global kill switch for all auto-replies
+  autoRepliesPaused  Boolean  @default(false)
+
+  sessions      Session[]
+  accounts      MailAccount[]
+  smtpSenders   SmtpSender[]
+  contacts      Contact[]
+  sentLogs      SentLog[]
+  sequences     Sequence[]
+  unsubscribes  Unsubscribe[]
+  aiProfile     AiProfile?
+  aiUsage       AiUsage[]
+  aiDrafts      AiDraft[]
+  autoResponders AutoResponder[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model MailAccount {
+  id             String   @id @default(cuid())
+  userId         String
+  label          String
+  email          String
+  method         String   // MANUAL | GOOGLE | MICROSOFT
+  imapHost       String?
+  imapPort       Int?
+  imapSecurity   String?  // SSL | STARTTLS
+  smtpHost       String?
+  smtpPort       Int?
+  smtpSecurity   String?  // SSL | STARTTLS
+  username       String?
+  passwordEnc    String?
+  refreshTokenEnc String?
+  accessTokenEnc String?
+  accessTokenExp DateTime?
+  status         String   @default("pending") // pending | connected | error | syncing | disconnected
+  lastError      String?
+  lastTestedAt   DateTime?
+  lastSyncAt     DateTime?
+  defaultSmtpSenderId String?
+  autoDraft      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultSmtpSender SmtpSender? @relation("AccountDefaultSender", fields: [defaultSmtpSenderId], references: [id], onDelete: SetNull)
+  folders  Folder[]
+  messages Message[]
+  syncJobs SyncJob[]
+  contactSources ContactSource[]
+  autoResponders AutoResponder[]
+
+  @@index([userId])
+}
+
+model SmtpSender {
+  id           String   @id @default(cuid())
+  userId       String
+  label        String
+  host         String
+  port         Int
+  security     String   // SSL | STARTTLS | NONE
+  username     String?
+  passwordEnc  String?
+  fromName     String
+  fromEmail    String
+  replyTo      String?
+  isDefault    Boolean  @default(false)
+  status       String   @default("pending")
+  lastTestedAt DateTime?
+  lastError    String?
+  hintDismissed Boolean @default(false)
+  dailyLimit   Int      @default(50)
+  createdAt    DateTime @default(now())
+
+  user     User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  linkedAccounts MailAccount[] @relation("AccountDefaultSender")
+
+  @@index([userId])
+}
+
+model Folder {
+  id          String   @id @default(cuid())
+  accountId   String
+  path        String
+  name        String
+  specialUse  String?
+  uidValidity String?
+  lastUid     Int      @default(0)
+  totalMessages Int    @default(0)
+  fetched     Int      @default(0)
+  done        Boolean  @default(false)
+  backfilled  Boolean  @default(false)
+  account     MailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  messages    Message[]
+
+  @@unique([accountId, path])
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  accountId   String
+  folderId    String
+  uid         Int
+  messageIdHeader String?
+  inReplyTo   String?
+  references  String?
+  listId      String?
+  listUnsubscribe String?
+  precedence  String?
+  autoSubmitted String?
+  xAutoResponseSuppress String?
+  rawHeaders  String?
+  subject     String?
+  fromName    String?
+  fromEmail   String?
+  toAddrs     Json?
+  ccAddrs     Json?
+  replyToAddrs Json?
+  textBody    String?
+  htmlBody    String?
+  attachments Json?
+  flags       String[]
+  receivedAt  DateTime
+  isNew       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  account MailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  folder  Folder      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  aiDraft AiDraft?
+  autoReplyLogs AutoReplyLog[]
+
+  @@unique([folderId, uid])
+  @@index([accountId, receivedAt])
+  @@index([messageIdHeader])
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  userId    String
+  email     String
+  name      String?
+  company   String?
+  messageCount Int   @default(0)
+  firstSeen DateTime
+  lastSeen  DateTime
+  verificationStatus String?
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources   ContactSource[]
+  verifications VerificationResult[]
+  enrollments SequenceEnrollment[]
+
+  @@unique([userId, email])
+}
+
+model ContactSource {
+  id        String @id @default(cuid())
+  contactId String
+  accountId String
+  folderPath String
+  count     Int    @default(0)
+  contact   Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  account   MailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, accountId, folderPath])
+}
+
+model SyncJob {
+  id        String   @id @default(cuid())
+  accountId String
+  status    String   @default("queued") // queued | running | done | error
+  foldersTotal Int   @default(0)
+  foldersDone  Int   @default(0)
+  messagesFetched Int @default(0)
+  contactsFound Int  @default(0)
+  currentFolder String?
+  error     String?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  account   MailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+}
+
+model VerificationResult {
+  id        String   @id @default(cuid())
+  contactId String
+  email     String
+  status    String   // valid | invalid | risky | unknown
+  reason    String?
+  smtpCode  Int?
+  smtpMessage String?
+  checkedAt DateTime @default(now())
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, checkedAt])
+}
+
+model SentLog {
+  id       String   @id @default(cuid())
+  userId   String
+  senderId String
+  senderType String // ACCOUNT | SMTP
+  to       String
+  subject  String
+  status   String   // sent | failed
+  error    String?
+  sentAt   DateTime @default(now())
+  user     User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sentAt])
+}
+
+model Sequence {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  status    String   @default("draft") // draft | active | paused | archived
+  sendViaType String?  // ACCOUNT | SMTP
+  sendViaId   String?
+  timezone  String   @default("UTC")
+  sendDays  Int[]    @default([1,2,3,4,5])
+  startHour Int      @default(9)
+  endHour   Int      @default(17)
+  dailySendLimit Int @default(50)
+  hourlySendLimit Int @default(20)
+  stopOnReply Boolean @default(true)
+  skipUnverified Boolean @default(true)
+  saveCopyToSent Boolean @default(false)
+  footerText String  @default("You are receiving this because we think this may be relevant to you.")
+  postalAddress String @default("")
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps     SequenceStep[]
+  enrollments SequenceEnrollment[]
+
+  @@index([userId])
+}
+
+model SequenceStep {
+  id        String @id @default(cuid())
+  sequenceId String
+  position  Int
+  subject   String
+  bodyHtml  String
+  delayDays Int    @default(0)
+  delayHours Int   @default(0)
+  sameThread Boolean @default(false)
+  sequence  Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  sends     SequenceSend[]
+
+  @@index([sequenceId, position])
+}
+
+model SequenceEnrollment {
+  id        String   @id @default(cuid())
+  sequenceId String
+  contactId String
+  status    String   @default("active") // active|completed|replied|bounced|unsubscribed|paused|failed
+  currentStep Int    @default(0)
+  nextSendAt DateTime?
+  enrolledAt DateTime @default(now())
+  finishedAt DateTime?
+  stopReason String?
+  sequence  Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sends     SequenceSend[]
+
+  @@unique([sequenceId, contactId])
+  @@index([status, nextSendAt])
+}
+
+model SequenceSend {
+  id        String   @id @default(cuid())
+  enrollmentId String
+  stepId    String
+  messageIdHeader String
+  status    String   // queued | sent | failed | bounced
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+  enrollment SequenceEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  step      SequenceStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, stepId])
+  @@index([messageIdHeader])
+}
+
+model Unsubscribe {
+  id        String   @id @default(cuid())
+  userId    String
+  email     String
+  source    String
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, email])
+}
+
+model AiProfile {
+  userId       String @id
+  businessName String @default("")
+  whatYouDo    String @default("")
+  tone         String @default("professional")
+  signature    String @default("")
+  language     String @default("English")
+  doNotSay     String @default("")
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AiUsage {
+  id           String   @id @default(cuid())
+  userId       String
+  feature      String
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  createdAt    DateTime @default(now())
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model AiDraft {
+  id        String   @id @default(cuid())
+  userId    String
+  messageId String   @unique
+  accountId String
+  subject   String
+  body      String
+  status    String   @default("pending") // pending | used | discarded
+  kind      String   @default("draft")   // draft | escalated
+  note      String?
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model AutoResponder {
+  id        String   @id @default(cuid())
+  userId    String
+  accountId String
+  name      String
+  enabled   Boolean  @default(false)
+  paused    Boolean  @default(false)
+  mode      String   @default("approve") // approve | auto
+  sendViaType String @default("ACCOUNT")
+  sendViaId String?
+  instructions String @default("")
+  knowledgeText String @default("")
+  onlyKnownContacts Boolean @default(false)
+  folderFilter String?
+  toAddressFilter String?
+  keywordsInclude String @default("")
+  keywordsExclude String @default("")
+  activeStartHour Int @default(0)
+  activeEndHour Int @default(24)
+  timezone  String @default("UTC")
+  maxRepliesPerContactPerDay Int @default(1)
+  maxRepliesPerDay Int @default(30)
+  cooldownHours Int @default(24)
+  loopWindowHours Int @default(72)
+  loopMaxReplies Int @default(3)
+  maxAgeDays Int @default(3)
+  escalationKeywords String @default("refund,legal,lawyer,cancel,chargeback,complaint,discount")
+  saveCopyToSent Boolean @default(true)
+  dryRunOkAt DateTime?
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account   MailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  logs      AutoReplyLog[]
+
+  @@index([userId])
+}
+
+model AutoReplyLog {
+  id          String   @id @default(cuid())
+  responderId String
+  messageId   String
+  contactEmail String
+  decision    String   // replied | drafted | skipped | escalated
+  reason      String
+  aiDraftId   String?
+  sentMessageId String?
+  error       String?
+  createdAt   DateTime @default(now())
+  responder   AutoResponder @relation(fields: [responderId], references: [id], onDelete: Cascade)
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([responderId, messageId])
+  @@index([responderId, createdAt])
+}
