@@ -148,3 +148,16 @@
   .page-title { @apply text-2xl font-semibold tracking-tight; }
   .container-page { @apply mx-auto max-w-6xl px-4 sm:px-6; }
 }
+
+@layer components {
+  .callout-info { @apply my-2 rounded-lg border border-info-line bg-info-soft p-3 text-sm text-info; }
+  .callout-warn { @apply my-2 rounded-lg border border-warning-line bg-warning-soft p-3 text-sm text-warning; }
+  .callout-danger { @apply my-2 rounded-lg border border-danger-line bg-danger-soft p-3 text-sm text-danger; }
+  .skeleton { @apply animate-pulse rounded-lg bg-surface-muted; }
+  .spinner { @apply inline-block size-4 animate-spin rounded-full border-2 border-line-strong border-t-brand; }
+  .progress { @apply h-2 overflow-hidden rounded-full bg-surface-muted; }
+  .progress > div { @apply h-full bg-brand; }
+  .table-wrap { @apply mb-3 overflow-x-auto rounded-xl border border-line; }
+  .table-wrap table { @apply min-w-full; }
+  .empty-state { @apply rounded-xl border border-dashed border-line-strong p-8 text-center text-sm text-muted; }
+}
