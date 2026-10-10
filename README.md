@@ -7,6 +7,7 @@ Next.js (App Router) + Postgres (Prisma) + Redis + a separate BullMQ worker (`wo
 ```
 cp .env.example .env   # set ENCRYPTION_KEY (openssl rand -base64 32), SIGNING_SECRET
 npm install && npx prisma db push
+npm run db:backfill    # one-time: marks existing users as email-confirmed (safe to re-run)
 npm run dev            # web
 npm run worker         # worker (separate terminal)
 ```
@@ -39,3 +40,24 @@ Required env: `DATABASE_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `SIGNING_SECRET`, `
 ## Security notes
 
 Mailbox passwords, OAuth tokens, SMTP passwords and user AI keys are encrypted with AES-256-GCM (`lib/crypto.ts`) and never returned to the client (masked). Everything is scoped by `userId` server-side.
+
+## Site emails, sign-up and sign-in
+
+New accounts confirm their email with a 6-digit code (15 min, 5 tries). Set the `SITE_*` variables from `.env.example` on the **web** service (the worker doesn't send site emails); a transactional provider such as Resend works over HTTPS and needs no ports. Site emails never go through users' own mailboxes/senders. Google sign-in reuses `GOOGLE_CLIENT_ID/SECRET` and needs `${APP_URL}/api/auth/google/callback` as an extra authorized redirect URI. The worker removes unconfirmed accounts after `SITE_UNVERIFIED_TTL_DAYS` (default 7) once a day.
+
+Emergency brake: `SIGNUPS_ENABLED=false` closes sign-ups (password and new Google accounts); existing users keep working. `SIGNUP_MAX_PER_HOUR` / `SIGNUP_MAX_PER_DAY` cap new accounts globally.
+
+Legal pages (`/privacy`, `/terms`) read `LEGAL_ENTITY_NAME`, `LEGAL_CONTACT_EMAIL`, `LEGAL_EFFECTIVE_DATE`, `LEGAL_GOVERNING_LAW`. Have the text reviewed by a lawyer.
+
+### Adding a cookie, browser storage key or analytics tool
+
+Add the entry to `lib/storage-registry.ts` first; the privacy page updates itself, and `npm run check:storage` (run before every build) fails if you missed one.
+
+## Deploying this update
+
+1. Set the site email variables and `APP_URL` on the web service.
+2. In Google Cloud Console add `${APP_URL}/api/auth/google/callback` as an authorized redirect URI and publish the consent screen from "Testing" to "In production".
+3. Deploy. The web container runs `db push` then the one-time backfill (look for `grandfathered N users` in its logs; if it fails the container won't start, which is intended).
+4. Log in as yourself to confirm you were grandfathered.
+5. Fill the `LEGAL_*` variables and have the privacy and terms pages reviewed by a lawyer.
+6. Emergency brakes: `SIGNUPS_ENABLED=false` and `STORAGE_CHECK=warn` (lets a hotfix build pass with a loud banner; never the default).
