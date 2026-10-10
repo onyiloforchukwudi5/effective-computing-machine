@@ -27,11 +27,13 @@ export default function Accounts() {
 
   return (
     <>
-      <h1>Mail accounts</h1>
-      <div className="row" style={{ marginBottom: 10 }}>
-        <a href="/api/oauth/start?provider=GOOGLE"><button>Connect Gmail (OAuth)</button></a>
-        <a href="/api/oauth/start?provider=MICROSOFT"><button>Connect Outlook / Microsoft 365 (OAuth)</button></a>
-      </div>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div><h1 className="mb-1">Mail accounts</h1><p className="text-sm text-muted">Connect the mailboxes you read, reply from and sync.</p></div>
+        <div className="row">
+          <a href="/api/oauth/start?provider=GOOGLE"><button>Connect Gmail (OAuth)</button></a>
+          <a href="/api/oauth/start?provider=MICROSOFT"><button>Connect Outlook / Microsoft 365 (OAuth)</button></a>
+        </div>
+      </header>
       <div className="card">
         <h3>{editing ? "Edit account" : "Add account (manual IMAP + SMTP)"}</h3>
         <div className="grid">
@@ -46,22 +48,23 @@ export default function Accounts() {
           <input type="number" placeholder="SMTP port" value={f.smtpPort} onChange={(e) => set("smtpPort", Number(e.target.value))} />
           <select value={f.smtpSecurity} onChange={(e) => set("smtpSecurity", e.target.value)}><option>SSL</option><option>STARTTLS</option></select>
         </div>
-        {msg && <p className={msg.ok ? "ok" : "err"}>{msg.text}</p>}
+        {msg && <p className={msg.ok ? "callout-info" : "callout-danger"} role="status">{msg.text}</p>}
         <div className="row"><button onClick={save}>{editing ? "Save & test" : "Add & test"}</button>{editing && <button className="sec" onClick={() => { setEditing(null); setF(blank); }}>Cancel</button>}</div>
       </div>
+      {list.length === 0 && <div className="empty-state"><b className="block text-fg">No mail accounts yet</b>Connect Gmail or Outlook above, or add one manually with IMAP + SMTP.</div>}
       {list.map((a) => (
         <div className="card" key={a.id}>
-          <div className="row"><b>{a.label}</b> <span className="muted">{a.email} · {a.method}</span>
-            <span className={a.status === "connected" ? "ok" : a.status === "error" ? "err" : "muted"}>● {a.status}</span></div>
-          {a.lastError && <p className="err" style={{ fontSize: 13 }}>{a.lastError}</p>}
+          <div className="row"><b>{a.label}</b> <span className="text-sm text-muted">{a.email} · {a.method}</span>
+            <span className={`flex items-center gap-1.5 text-sm ${a.status === "connected" ? "text-success" : a.status === "error" ? "text-danger" : "text-muted"}`}><span className="size-2 rounded-full bg-current" aria-hidden="true" />{a.status}</span></div>
+          {a.lastError && <p className="my-1 text-[13px] text-danger">{a.lastError}</p>}
           <div className="row">
-            <label>Send via SMTP sender{" "}
+            <label className="text-sm">Send via SMTP sender{" "}
               <select value={a.defaultSmtpSenderId ?? ""} onChange={async (e) => { await api(`/api/accounts/${a.id}`, "PATCH", { defaultSmtpSenderId: e.target.value || null }); load(); }}>
                 <option value="">Mailbox's own SMTP</option>{senders.map((s) => <option key={s.id} value={s.id}>{s.label} &lt;{s.fromEmail}&gt;</option>)}
               </select></label>
-            <label><input type="checkbox" checked={a.autoDraft} onChange={async (e) => { await api(`/api/accounts/${a.id}`, "PATCH", { autoDraft: e.target.checked }); load(); }} /> Auto-draft replies with AI</label>
+            <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={a.autoDraft} onChange={async (e) => { await api(`/api/accounts/${a.id}`, "PATCH", { autoDraft: e.target.checked }); load(); }} /> Auto-draft replies with AI</label>
           </div>
-          <div className="row" style={{ marginTop: 6 }}>
+          <div className="row mt-2">
             <button className="sec" onClick={async () => { const r = await api<{ ok: boolean; imap: string; smtp: string }>(`/api/accounts/${a.id}/test`, "POST"); setMsg({ ok: !!r.data.ok, text: r.data.ok ? "Test passed" : `${r.data.imap} ${r.data.smtp}` }); load(); }}>Test</button>
             {a.method === "MANUAL" && <button className="sec" onClick={() => { setEditing(a.id); setF({ label: a.label, email: a.email, imapHost: a.imapHost ?? "", imapPort: a.imapPort ?? 993, imapSecurity: a.imapSecurity ?? "SSL", smtpHost: a.smtpHost ?? "", smtpPort: a.smtpPort ?? 465, smtpSecurity: a.smtpSecurity ?? "SSL", username: a.username ?? "", password: "" }); }}>Edit</button>}
             <button className="sec" onClick={async () => { await api(`/api/accounts/${a.id}`, "PATCH", { disconnect: true }); load(); }}>Disconnect</button>
