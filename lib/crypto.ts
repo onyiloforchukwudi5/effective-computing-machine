@@ -34,6 +34,11 @@ function signingSecret(): string {
   return s;
 }
 
+/** Keyed HMAC-SHA256 (hex) with the signing secret; used for low-entropy values such as 6-digit codes. */
+export function hmacHex(data: string): string {
+  return createHmac("sha256", signingSecret()).update(data).digest("hex");
+}
+
 /** Signed token for public routes (unsubscribe). */
 export function signToken(payload: Record<string, string>): string {
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");

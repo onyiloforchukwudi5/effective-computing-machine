@@ -61,7 +61,7 @@ function MailInner() {
                   <button className="sec" onClick={async () => { const r = await api(`/api/ai/drafts/${msg.aiDraft!.id}`, "POST", { action: "regenerate" }); if (!r.ok) alert(r.data.error); open(msg.id); }}>Regenerate</button></div>
                 <p className="muted">Approve &amp; send: open the draft, review it, then press Send. Nothing is sent without you.</p></div>)}
             {msg.hasRemoteImages && !images && <div className="warn">Remote images are blocked. <button className="sec" onClick={() => open(msg.id, true)}>Show images</button></div>}
-            {msg.html ? <div dangerouslySetInnerHTML={{ __html: msg.html }} /> : <pre style={{ whiteSpace: "pre-wrap" }}>{msg.text}</pre>}
+            {msg.html ? <div className="rounded-lg bg-white p-3 text-slate-900" dangerouslySetInnerHTML={{ __html: msg.html }} /> : <pre style={{ whiteSpace: "pre-wrap" }}>{msg.text}</pre>}
             {msg.attachments && msg.attachments.length > 0 && <p className="muted">Attachments: {msg.attachments.map((a) => `${a.filename ?? "file"} (${a.size}b)`).join(", ")}</p>}
             <div className="row"><button onClick={() => setCompose(reply(false, msg))}>Reply</button><button className="sec" onClick={() => setCompose(reply(true, msg))}>Reply all</button>
               <button className="sec" onClick={() => setCompose({ mode: "forward", subject: `Fwd: ${msg.subject ?? ""}`, body: `\n\n---------- Forwarded message ----------\nFrom: ${msg.fromEmail}\n\n${msg.text ?? ""}` })}>Forward</button></div>

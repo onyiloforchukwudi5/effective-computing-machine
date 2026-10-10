@@ -18,6 +18,10 @@ model User {
   aiKeyEnc           String?
   // global kill switch for all auto-replies
   autoRepliesPaused  Boolean  @default(false)
+  // null until the address is confirmed (6-digit code, Google sign-in or password reset)
+  emailVerifiedAt    DateTime?
+  // Google's stable account id (sign-in with Google)
+  googleSub          String?  @unique
 
   sessions      Session[]
   accounts      MailAccount[]
@@ -30,6 +34,28 @@ model User {
   aiUsage       AiUsage[]
   aiDrafts      AiDraft[]
   autoResponders AutoResponder[]
+  authTokens    AuthToken[]
+}
+
+model AuthToken {
+  id        String    @id @default(cuid())
+  userId    String
+  purpose   String    // EMAIL_VERIFY (6-digit code, 15 min) | PASSWORD_RESET (random link token, 1h)
+  tokenHash String    @unique
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+}
+
+// one-time job markers (e.g. backfill_email_verified_v1)
+model AppMeta {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
 }
 
 model Session {

@@ -1,4 +1,5 @@
 import { Worker } from "bullmq";
+import { cleanupUnverified } from "./cleanup";
 import { redis } from "../lib/redis";
 import { queue, QUEUES, startSync } from "../lib/queues";
 import { db } from "../lib/db";
@@ -43,6 +44,8 @@ async function boot() {
   await queue(QUEUES.sequences).upsertJobScheduler("sequence-tick", { every: 60_000 }, { name: "tick" });
   refreshPort25().catch(() => {});
   setInterval(() => refreshPort25().catch(() => {}), 6 * 3600_000);
+  setTimeout(() => cleanupUnverified().catch(() => {}), 60_000);
+  setInterval(() => cleanupUnverified().catch(() => {}), 24 * 3600_000);
   log("started");
 }
 boot().catch((e) => { console.error(e); process.exit(1); });

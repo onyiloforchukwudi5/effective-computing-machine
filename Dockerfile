@@ -12,4 +12,4 @@ FROM base AS run
 ENV NODE_ENV=production
 COPY --from=build /app /app
 # SERVICE=web (default) runs Next.js, SERVICE=worker runs the BullMQ worker
-CMD ["sh", "-c", "if [ \"$SERVICE\" = \"worker\" ]; then npx tsx worker/index.ts; else npx prisma db push --skip-generate && npm run start; fi"]
+CMD ["sh", "-c", "if [ \"$SERVICE\" = \"worker\" ]; then npx tsx worker/index.ts; else npx prisma db push --skip-generate && npx tsx scripts/backfill-email-verified.ts && npm run start; fi"]
